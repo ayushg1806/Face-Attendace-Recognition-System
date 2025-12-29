@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+  {% if profile_only %}
+    <h2>Complete Your Profile</h2>
+    <p>Please complete your employee details and register your face.</p>
+  {% else %}
+    <h2>Employee Registration</h2>
+  {% endif %}
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    {% if not profile_only %}
+      <!-- New user fields -->
+      <div class="card">
+        {{ form.username.label_tag }}
+        {{ form.username }}
+
+        {{ form.first_name.label_tag }}
+        {{ form.first_name }}
+
+        {{ form.last_name.label_tag }}
+        {{ form.last_name }}
+
+        {{ form.email.label_tag }}
+        {{ form.email }}
+
+        {{ form.password.label_tag }}
+        {{ form.password }}
+      </div>
+    {% endif %}
+
+    <!-- Profile fields (common for both cases) -->
+    <div class="card">
+      <label for="employee_id">Employee ID</label>
+      <input type="text" name="employee_id" id="employee_id" required>
+
+      <label for="department">Department</label>
+      <input type="text" name="department" id="department">
+    </div>
+
+    <!-- Face capture section -->
+    <div class="card">
+      <h3>Face Registration</h3>
+      <p>Please ensure your face is clearly visible and the area is well-lit.</p>
+
+      <video id="video" width="320" height="240" autoplay></video>
+      <canvas id="canvas" width="320" height="240" style="display:none"></canvas>
+
+      <input type="hidden" id="face_image_data" name="face_image_data">
+
+      <button type="button" id="captureBtn">Capture Face</button>
+      <p id="captureStatus"></p>
+    </div>
+
+    <button type="submit">
+      {% if profile_only %}
+        Save Profile
+      {% else %}
+        Register
+      {% endif %}
+    </button>
+  </form>
+
+  <script>
+    const captureButton = document.getElementById('captureBtn');
+    const statusText = document.getElementById('captureStatus');
+
+    captureButton.addEventListener('click', async function () {
+      statusText.innerText = 'Capturing face...';
+      const dataUrl = await captureImage();
+      document.getElementById('face_image_data').value = dataUrl;
+      statusText.innerText = 'Face captured successfully.';
+    });
+  </script>
+
+{% endblock %}

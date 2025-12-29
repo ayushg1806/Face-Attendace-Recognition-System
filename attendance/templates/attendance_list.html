@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h2>Attendance Records</h2>
+  <table border='1'>
+    <tr><th>Employee</th><th>Date</th><th>Check-in</th><th>Status</th></tr>
+    {% for entry in entries %}
+      <tr>
+        <td>{{ entry.employee.user.get_full_name }} ({{ entry.employee.employee_id }})</td>
+        <td>{{ entry.date }}</td>
+        <td>{{ entry.check_in_time|default:"—" }}</td>
+        <td class="{% if entry.status == 'Present' %}status-present{% else %}status-absent{% endif %}">
+            {{ entry.status }}
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan='4'>No records found</td></tr>
+    {% endfor %}
+  </table>
+{% endblock %}

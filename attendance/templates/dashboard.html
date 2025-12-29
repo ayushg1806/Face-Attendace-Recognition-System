@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <section class="dashboard">
+
+    <!-- Welcome Section -->
+    <h2>Welcome, {{ user.get_full_name }}</h2>
+
+    {% if profile %}
+      <div class="card">
+        <p><strong>Employee ID:</strong> {{ profile.employee_id }}</p>
+        <p><strong>Department:</strong> {{ profile.department }}</p>
+      </div>
+
+      <!-- Attendance Marking Section -->
+      <div class="card">
+        <h3>Mark Attendance</h3>
+        <p>Please ensure your face is clearly visible and the area is well-lit.</p>
+
+        <div class="webcam-box">
+          <video id="video" width="320" height="240" autoplay></video>
+          <canvas id="canvas" width="320" height="240"></canvas>
+        </div>
+
+        <button id="markAttendanceBtn">Mark Attendance</button>
+        <p id="markResult"></p>
+      </div>
+
+      <!-- Attendance Table Section -->
+      <div class="card">
+        <h3>Recent Attendance</h3>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Check-in Time</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in attendance_entries %}
+              <tr>
+                <td>{{ entry.date }}</td>
+                <td>{{ entry.check_in_time|default:"—" }}</td>
+                <td class="{% if entry.status == 'Present' %}status-present{% else %}status-absent{% endif %}">
+                  {{ entry.status }}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="3" style="text-align:center;">No attendance records found</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% else %}
+      <div class="error">
+        Please register your profile first.
+      </div>
+    {% endif %}
+
+  </section>
+
+  <!-- Attendance JS -->
+  <script>
+    const attendanceButton = document.getElementById('markAttendanceBtn');
+
+    if (attendanceButton) {
+      attendanceButton.addEventListener('click', async function () {
+        document.getElementById('markResult').innerText = 'Processing...';
+
+        const capturedImage = await captureImage();
+
+        const response = await fetch('{% url "recognize" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          body: JSON.stringify({ image: capturedImage })
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'ok') {
+          document.getElementById('markResult').innerText =
+            'Attendance successfully marked for ' + result.first_name;
+          setTimeout(() => location.reload(), 1200);
+        } else {
+          document.getElementById('markResult').innerText =
+            'Error: ' + result.message;
+        }
+      });
+    }
+  </script>
+
+{% endblock %}
