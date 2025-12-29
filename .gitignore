@@ -17,3 +17,5 @@ media/
 
 # Environment variables
 .env
+
+faces/
