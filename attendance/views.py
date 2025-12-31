@@ -3,11 +3,15 @@ import io
 import json
 from datetime import date, datetime, timedelta
 from django.shortcuts import render, redirect
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponse
 from django.core.files.base import ContentFile
+from openpyxl import Workbook
+from openpyxl.chart import PieChart, Reference, BarChart
+from openpyxl.styles import Font
 from .forms import EmployeeSignUpForm, LoginForm
 from .models import EmployeeProfile, Attendance
 
@@ -152,7 +156,7 @@ def dashboard_view(request):
 
     if profile:
         today = date.today()
-        number_of_days = 7   # you can change this to 30 if needed
+        number_of_days = 7
 
         # Generate last N dates (including today)
         recent_dates = [today - timedelta(days=day) for day in range(number_of_days)]
@@ -251,19 +255,18 @@ def attendance_list_view(request):
         return redirect('login')
 
     today = date.today()
-    number_of_days = 7
+    number_of_days = 30
     recent_dates = [today - timedelta(days=i) for i in range(number_of_days)]
 
     attendance_entries = []
 
-    # ADMIN VIEW → all employees
     if request.user.is_staff:
-        employees = EmployeeProfile.objects.all()
-
-    # EMPLOYEE VIEW → only own records
+        # Admin can see all employees
+        employees = EmployeeProfile.objects.select_related('user').all()
     else:
+        # Normal employee sees only own data
         try:
-            employees = [EmployeeProfile.objects.get(user=request.user)]
+            employees = [EmployeeProfile.objects.select_related('user').get(user=request.user)]
         except EmployeeProfile.DoesNotExist:
             employees = []
 
@@ -277,10 +280,11 @@ def attendance_list_view(request):
 
         for current_date in recent_dates:
             if current_date in record_map:
+                record = record_map[current_date]
                 attendance_entries.append({
                     'employee': employee,
                     'date': current_date,
-                    'check_in_time': record_map[current_date].check_in_time,
+                    'check_in_time': record.check_in_time,
                     'status': 'Present'
                 })
             else:
@@ -292,6 +296,116 @@ def attendance_list_view(request):
                 })
 
     return render(request, 'attendance_list.html', {
-        'entries': attendance_entries
+        'entries': attendance_entries,
+        'employees': employees if request.user.is_staff else []  # for admin dropdown
     })
 
+@staff_member_required
+def download_attendance_excel(request):
+    employee_id = request.GET.get('employee_id')
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+
+    if not employee_id or not start_date or not end_date:
+        return HttpResponse('Employee and date range are required')
+
+    employee = EmployeeProfile.objects.select_related('user').get(id=employee_id)
+
+    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = 'Attendance Report'
+
+    headers = [
+        'Employee Name',
+        'Employee ID',
+        'Department',
+        'Date',
+        'Check-in Time',
+        'Status',
+        'Status Value'
+    ]
+    sheet.append(headers)
+    for col in range(1, len(headers) + 1):
+        sheet.cell(row=1, column=col).font = Font(bold=True)
+
+    present_count = 0
+    absent_count = 0
+
+    total_days = (end_date - start_date).days + 1
+    all_dates = [start_date + timedelta(days=i) for i in range(total_days)]
+
+    records = Attendance.objects.filter(
+        employee=employee,
+        date__range=[start_date, end_date]
+    )
+    record_map = {record.date: record for record in records}
+
+    for current_date in all_dates:
+        if current_date in record_map:
+            record = record_map[current_date]
+            status = 'Present'
+            status_value = 1
+            present_count += 1
+            check_in = record.check_in_time.strftime('%H:%M:%S') if record.check_in_time else ''
+        else:
+            status = 'Absent'
+            status_value = 0
+            absent_count += 1
+            check_in = ''
+
+        sheet.append([
+            employee.user.get_full_name(),
+            employee.employee_id,
+            employee.department,
+            current_date.strftime('%Y-%m-%d'),
+            check_in,
+            status,
+            status_value
+        ])
+
+    last_row = sheet.max_row
+
+    summary_row = last_row + 3
+    sheet[f'A{summary_row}'] = 'Summary'
+    sheet[f'A{summary_row}'].font = Font(bold=True)
+
+    sheet.append(['Present', present_count])
+    sheet.append(['Absent', absent_count])
+
+    summary_start = summary_row + 1
+
+    pie = PieChart()
+    labels = Reference(sheet, min_col=1, min_row=summary_start, max_row=summary_start + 1)
+    data = Reference(sheet, min_col=2, min_row=summary_start, max_row=summary_start + 1)
+
+    pie.add_data(data, titles_from_data=False)
+    pie.set_categories(labels)
+    pie.title = 'Attendance Distribution'
+
+    sheet.add_chart(pie, 'I2')
+
+    bar = BarChart()
+    bar.title = 'Date-wise Attendance'
+    bar.y_axis.title = 'Present (1) / Absent (0)'
+    bar.x_axis.title = 'Date'
+
+    values = Reference(sheet, min_col=7, min_row=2, max_row=last_row)
+    categories = Reference(sheet, min_col=4, min_row=2, max_row=last_row)
+
+    bar.add_data(values, titles_from_data=False)
+    bar.set_categories(categories)
+
+    sheet.add_chart(bar, 'I20')
+
+    filename = f'{employee.employee_id}_{start_date}_to_{end_date}.xlsx'
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename={filename}'
+
+    workbook.save(response)
+    return response
