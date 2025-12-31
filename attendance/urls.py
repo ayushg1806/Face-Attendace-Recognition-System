@@ -10,4 +10,5 @@ urlpatterns = [
     path('dashboard/', views.dashboard_view, name='dashboard'),
     path('recognize/', views.recognize_view, name='recognize'),
     path('attendance-list/', views.attendance_list_view, name='attendance_list'),
+    path('attendance-download/', views.download_attendance_excel, name='attendance_download'),
 ]
