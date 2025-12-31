@@ -1,6 +1,29 @@
 {% extends 'base.html' %}
 {% block content %}
   <h2>Attendance Records</h2>
+  {% if user.is_staff %}
+    <form method="get" action="{% url 'attendance_download' %}" style="margin-bottom:20px;">
+
+      <label>Employee:</label>
+      <select name="employee_id" required>
+        <option value="">-- Select Employee --</option>
+        {% for employee in employees %}
+          <option value="{{ employee.id }}">
+            {{ employee.user.get_full_name }} ({{ employee.employee_id }})
+          </option>
+        {% endfor %}
+      </select>
+
+      <label>Start Date:</label>
+      <input type="date" name="start_date" required>
+
+      <label>End Date:</label>
+      <input type="date" name="end_date" required>
+
+      <button type="submit">Download Excel Report</button>
+    </form>
+  {% endif %}
+
   <table border='1'>
     <tr><th>Employee</th><th>Date</th><th>Check-in</th><th>Status</th></tr>
     {% for entry in entries %}
